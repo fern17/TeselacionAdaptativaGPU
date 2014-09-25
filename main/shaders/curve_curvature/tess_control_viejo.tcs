@@ -1,0 +1,87 @@
+#version 400
+layout (vertices = 4) out;
+
+in vec3 VPosition[];
+out vec3 TCPosition[];
+uniform float MaxCurvature;
+uniform float MaxTess;
+uniform float TessDefault;
+uniform bool Tessellate;
+uniform float CurrentParameter;
+uniform int NumLines;
+uniform float CurvFactor;
+
+int CurveDegree = 3;
+#define P0 VPosition[0]
+#define P1 VPosition[1]
+#define P2 VPosition[2]
+#define P3 VPosition[3]
+
+vec3 firstDerivative(float t) {
+    vec3 retval = -3*P0 + P1 + 6*t*(P0 - 2*P1 + P2) + 3*t*t*(-P0 + 3*P1 - 3*P2 + P3);
+    return retval;
+}
+
+vec3 secondDerivative(float t) {
+    vec3 retval = 6*(P0 - 2*P1 + P2) + 6*t*(-P0 + 3*P1 - 3*P2 + P3);
+    return retval;
+}
+
+float calcCurvature(float parameter) {
+    vec3 first = firstDerivative(parameter);
+    vec3 second = secondDerivative(parameter);
+    vec3 curvature = cross(cross(first, second), first)/pow(length(first), 4);
+    return length(curvature);
+}
+
+//Calculo del area del triangulo formado por los puntos p0, p1 y p2
+float calcArea(vec3 p0, vec3 p1, vec3 p2) {
+    return 0.5*length(cross(p1-p0, p2-p0));
+}
+
+//Para seno = 0 el nivel es 1.
+//Para seno = 1 o -1, el nivel es maximo
+float calcTessellationByAngle(vec3 p0, vec3 p1, vec3 p2) {
+    vec3 u = (p1-p0);
+    vec3 v = (p2-p0);
+    u = u/length(u);
+    v = v/length(v);
+    float sini = length(cross(u, v));
+    return (MaxTess-1)*sini + 1.0; 
+}
+
+void main() {
+    //Pasa la posicion sin modificar
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+    TCPosition[gl_InvocationID] = VPosition[gl_InvocationID];
+  
+    float NumSegments = TessDefault;
+    float NumStrips = NumLines;
+    if (Tessellate) {
+
+        //Calculo de curvatura segun la ecuacion general
+      //float kk1 = calcCurvature(0.2);
+      //float kk2 = calcCurvature(CurrentParameter);
+      //float kk3 = calcCurvature(0.8);
+      //float kk = (kk1 + 2*kk2 + kk3)/4.0;
+      //NumSegments = ((MaxTess-1.0)/MaxCurvature)*kk + 1.0;
+
+      ////Calculo de curvatura como la mayor curvatura (y que es el area de los triangulos entre segmentos adyacentes)
+      //float kk1 = calcArea(VPosition[0], VPosition[1], VPosition[2]);
+      //float kk2 = calcArea(VPosition[1], VPosition[2], VPosition[3]);
+      //float kk = max(kk1, kk2);
+      //NumSegments = ((MaxTess-1.0)/MaxCurvature)*kk + 1.0;
+
+        float kk1 = calcTessellationByAngle(VPosition[0], VPosition[1], VPosition[2]);
+        float kk2 = calcTessellationByAngle(VPosition[1], VPosition[2], VPosition[3]);
+        float kk = max(kk1, kk2);
+        NumSegments = kk; 
+    } else {
+        NumStrips = 1;
+        NumSegments = TessDefault;
+    }
+    //Define el numero de niveles de teselacion (probado en ATI Catalyst)
+    //Intercambiar para nvidia
+        gl_TessLevelOuter[0] = NumStrips;
+        gl_TessLevelOuter[1] = NumSegments;
+}

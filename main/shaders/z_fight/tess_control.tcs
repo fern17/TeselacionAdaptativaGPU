@@ -1,0 +1,21 @@
+#version 400
+layout (vertices = 3) out;
+
+in vec3 VPosition[];
+out vec3 TCPosition[];
+uniform float TessDefault;
+uniform bool Tessellate;
+
+void main() {
+    //Pasa la posicion sin modificar
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+    TCPosition[gl_InvocationID] = VPosition[gl_InvocationID];
+
+    float tl = TessDefault;
+    if (!Tessellate) 
+        tl = 1.0;
+
+    for (int i = 0; i < 3; i++) 
+        gl_TessLevelOuter[i] = tl;
+    gl_TessLevelInner[0] = tl;
+}

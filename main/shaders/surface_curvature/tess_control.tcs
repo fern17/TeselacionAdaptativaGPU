@@ -1,0 +1,101 @@
+#version 400
+//Cantidad de vertices del patch de salida
+layout (vertices = 16) out;
+
+in vec3 VPosition[];
+out vec3 TCPosition[];
+
+uniform float MaxTess;
+uniform float CurvFactor;
+
+//Calcula el factor de teselacion para el vecindario alrededor de p1 en direccion ortogonal
+//p_{i-1} = p0.
+//p_i = p1;
+//p_{i+1} = p2
+float calcFactorOrtho(vec3 p0, vec3 p1, vec3 p2) {
+    vec3 midpoint = 0.5*(p0+p2);
+    float num = distance(p1, midpoint); //distancia entre el punto i y el punto medio
+    float den = distance(p0, p2); //distancia anterior posterior
+    return num/den;
+}
+
+//Calcula el factor de teselacion diagonal para una superficie
+//Se pide un vecindario de 4 vertices:
+//p_{i,j} = p00
+//p_{i+1, j} = p10;
+//p_{i, j+1} = p01;
+//p_{i+1, j+1} = p11
+float calcFactorDiag(vec3 p00, vec3 p10, vec3 p01, vec3 p11) {
+    float num = length(p11+p00-p10-p01);
+    float d1 = distance(p11, p00);
+    float d2 = distance(p01, p10);
+    float den = min(d1, d2);
+    return 0.5*num/den;
+}
+
+//Calcula el nivel de teselacion para una curva de 4 puntos
+float calcTessCurve(vec3 p0, vec3 p1, vec3 p2, vec3 p3, int numvertices) {
+    float c1 = calcFactorOrtho(p0, p1, p2);
+    float c2 = calcFactorOrtho(p1, p2, p3);
+    float maxi = max(c1, c2);
+    return max(2*(numvertices-1), min(MaxTess, CurvFactor*maxi));
+}
+
+void calcTessSurface(out float olevels[4], out float ilevels[2]) {
+
+    float max_h = 1.0;
+    float max_v = 1.0;
+    float max_d = 1.0;
+    int p;
+    float tlh[4]; //tesslevelhorizontal
+    for (int i = 0; i < 4; i++) {//niveles de teselacion horizontales
+        p = i*4;
+        tlh[i] = calcTessCurve(VPosition[p+0], VPosition[p+1], VPosition[p+2], VPosition[p+3], 4);
+        max_h = max(max_h, tlh[i]); //calculo del mayor
+    }
+    float tlv[4]; //tesslevelvertical
+    for (int i = 0; i < 4; i++) { //niveles de teselacion verticales
+        tlv[i] = calcTessCurve(VPosition[i], VPosition[i+4], VPosition[i+8], VPosition[i+12], 4);
+        max_v = max(max_v, tlv[i]); //calculo del mayor
+    }
+    float tld[9];
+    int pos = 0;
+    for (int k = 0; k < 11; k++) {
+        if (k == 3 || k == 7) continue;
+        tld[pos] = calcFactorDiag(VPosition[k], VPosition[k+1], VPosition[k+4], VPosition[k+4+1]);
+        pos++;
+        max_d = max(max_d, tld[k]); //calculo del mayor
+    }
+    //Los niveles externos son los que se calcularon en las curvas de borde
+    olevels[0] = tlh[0];
+    olevels[2] = tlh[3];
+    olevels[3] = tlv[0];
+    olevels[1] = tlv[3];
+    //Niveles internos
+    if (max_d > max_h && max_d > max_v) { //si el mayor diagonal es mayor que los otros dos, se asigna ese
+        ilevels[0] = max_d;
+        ilevels[1] = max_d;
+    } else { //si no, se asigna el mayor horizontal y el mayor vertical en el interior
+        ilevels[0] = max_h;
+        ilevels[1] = max_v;
+    }
+}
+
+
+void main() {
+    //Pasa la posicion sin modificar
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+    TCPosition[gl_InvocationID] = VPosition[gl_InvocationID];
+    float tlo[4];
+    float tli[2];
+    calcTessSurface(tlo, tli);
+
+    //Define los niveles de teselacion
+    gl_TessLevelOuter[0] = tlo[0];
+    gl_TessLevelOuter[1] = tlo[1];
+    gl_TessLevelOuter[2] = tlo[2];
+    gl_TessLevelOuter[3] = tlo[3];
+
+    gl_TessLevelInner[0] = tli[0];
+    gl_TessLevelInner[1] = tli[1];
+}

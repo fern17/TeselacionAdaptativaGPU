@@ -1,0 +1,211 @@
+#version 400
+layout (vertices = 6) out;
+
+in vec3 VPosition[];
+in vec3 VNormal[];
+//in vec3 VNN0[];
+//in vec3 VNN1[];
+//in vec3 VNN2[];
+
+out vec3 TCPosition[];
+out vec3 TCNormal[];
+
+uniform float MaxTess;
+uniform float TMin;
+uniform float TMax;
+uniform float TessDivisor;
+uniform bool Tessellate;
+uniform float TessDefault;
+uniform mat4 MVPMatrix;
+uniform vec2 ViewPortSize;
+uniform vec3 CamPos;
+uniform vec3 CamCenter;
+uniform bool Dyadic;
+uniform float Beta;
+#define ID gl_InvocationID
+
+//#define Pi VPosition[0]
+//#define Pj VPosition[1]
+//#define Pk VPosition[2]
+
+//V: vertice a calcular el tess factor
+//p: centroide del triangulo
+//c: posicion de la camara
+//Devuelve el peso wi para el vertice v
+
+////p sin usar??
+//float getWi(vec3 v, vec3 p, vec3 c) {
+//    vec3 u = normalize(p - c);
+//    vec3 vc = v - c;
+//    vec3 vu = dot(vc, u)*u;
+//    vec3 di = v - vu;
+//    //float wi = 1.0 / (distance(v,vu));
+//    float wi = 1.0 / distance(c,di); //corregir esto en el apunte
+//    //float wi = 1.0 / (length(di));
+//    return wi;
+//}
+
+//El nivel de silueta de una arista de un triangulo se calcula como el producto entre dos terminos
+//El primero es el producto punto entre el vector que va desde la camara al punto medio de la arista y la normal
+//Y el segundo es el mismo producto pero con la normal del triangulo vecino 
+float calcSilhouetteness(int edge, vec3 normS, vec3 normT, float beta) {
+    vec3 edgeMidPoint = (VPosition[(edge+1)%3] + VPosition[edge])/2.0;
+    vec3 midPointToCamVector = normalize(CamPos - edgeMidPoint);
+    //vec3 midPointToCamVector = normalize(CamPos - CamCenter);
+    if (length(normS) < 0.001) return 1.0; //revisar 
+    float firstTerm = dot(midPointToCamVector, normS);
+    float secondTerm = dot(midPointToCamVector, normT);
+    if (firstTerm < 0.0 && secondTerm < 0.0) return 0.0; //evitar teselar las aristas cuyos ambos triangulos miran para otro lado
+    float prod = firstTerm*secondTerm;
+    //float prod = min(firstTerm,secondTerm);
+
+    if (prod <= 0.0) return 1.0;
+    if (prod > beta) return 0.0;
+    return 1.0-prod/beta;
+    //return 1.0-prod; //alternativa que hace niveles de teselacion mas uniformes
+}
+
+bool calcUi(vec3 ei, vec3 c, vec3 nec, vec3 nvi) {
+    vec3 v = c - ei;
+    float t1 = dot(v, nec);
+    float t2 = dot(v, nvi);
+    return (t1*t2 <= 0);
+}
+
+float calcUiHat(vec3 ei, vec3 c, vec3 nec, vec3 nvi) {
+    vec3 v = normalize(c-ei);
+    float t1 = dot(v, nec);
+    float t2 = dot(v, nvi);
+    return t1*t2;
+}
+
+//Dado un valor y un limite, devuelve la potencia de dos mas cercana (buscando para arriba hasta max_exponent)
+//Si el valor supera 2^max_exponent, retorna 2^max_exponent
+float convertToExp2(float val, int max_exponent) {
+    for (int exponent = 0; exponent <= max_exponent; exponent++) {
+        float v = pow(2, exponent);
+        if (val < v) return v;
+    }
+    return pow(2, max_exponent);
+}
+
+void main() {
+    gl_out[ID].gl_Position = gl_in[ID].gl_Position; 
+    TCPosition[ID] = VPosition[ID];
+    TCNormal[ID] = VNormal[ID];
+    if (Tessellate) {
+        //Centroide
+    //  vec3 p = (Pi + Pj + Pk)/3.0;
+    // 
+    //  vec3 Ni = normalize(VNormal[0]);
+    //  vec3 Nj = normalize(VNormal[1]);
+    //  vec3 Nk = normalize(VNormal[2]);
+    //  vec3 nn = normalize(Ni + Nj + Nk);
+    //  //Esto hay que hacerlo con los del vecindario, no con los del triangulo
+    //  //Abs????
+    //  float ti = (getWi(Pi, p, CamPos)*dot(nn, Ni));
+    //  float tj = (getWi(Pj, p, CamPos)*dot(nn, Nj));
+    //  float tk = (getWi(Pk, p, CamPos)*dot(nn, Nk));
+    ////float ti = getWi(Pi, Ni, p, CamPos);
+    ////float tj = getWi(Pj, Nj, p, CamPos);
+    ////float tk = getWi(Pk, Nk, p, CamPos);
+
+    //  float val = max(max(ti, tj), tk); ///TessDivisor;
+    //  float tess_level = 2.0;
+    ////float m = -(MaxTess-1.0)/(TMax-TMin);
+    //////float dt = TMin/TMax;
+    //////float b = (MaxTess-dt)/(1.0-dt);
+    ////float b = (MaxTess-1.0)/(TMax-TMin)*TMin+MaxTess; //esta ecuacion esta sacando considerando que TMin no es igual a cero
+    ////if (val < TMin) tess_level = MaxTess;
+    ////else if (val > TMax) tess_level = 1.0;
+    ////else tess_level = m*val + b; 
+
+    //  float m = (MaxTess-1.0)/TMax;
+    //  if (val > TMax) tess_level = MaxTess;
+    //  else if (val < 0.0) tess_level = 1.0;
+    //  else tess_level = m*val + 1.0;
+      //gl_TessLevelOuter[0] = tess_level;
+      //gl_TessLevelOuter[1] = tess_level;
+      //gl_TessLevelOuter[2] = tess_level;
+      //gl_TessLevelInner[0] = tess_level;
+ 
+
+      ////Normal de este elemento
+      ////vec3 normal = normalize(cross((VPosition[1] - VPosition[0]), (VPosition[2] - VPosition[0])));
+      //vec3 normal = normalize(VNormal[0] + VNormal[1] + VNormal[2]);
+
+      ////Normales de los elementos vecinos, calculadas como la suma normalizada de las 3 normales de nodos
+      //vec3 n01 = normalize(VNormal[0] + VNormal[1] + VNormal[3]);
+      //vec3 n12 = normalize(VNormal[1] + VNormal[2] + VNormal[4]);
+      //vec3 n20 = normalize(VNormal[2] + VNormal[0] + VNormal[5]);
+
+      //float sil[3];
+      //float beta = 0.5; //regula el angulo critico en el cual dejar de teselar
+      //sil[0] = calcSilhouetteness(0, normal, n01, beta);
+      //sil[1] = calcSilhouetteness(1, normal, n12, beta);
+      //sil[2] = calcSilhouetteness(2, normal, n20, beta);
+      //float tl[3];
+      //int exponent = int(ceil(log2(MaxTess)));
+      //for (int i = 0; i < 3; ++i) {
+      //    tl[i] = (MaxTess-1.0)*sil[i] + 1.0; //MaxTess para sil=1. 1 para sil = 0, Lineal entre medio
+      //    if (Dyadic)
+      //        gl_TessLevelOuter[i] = convertToExp2(tl[i], exponent); //conversion a potencias de 2
+      //    else
+      //        gl_TessLevelOuter[i] = tl[i];
+      //}
+      //gl_TessLevelInner[0] = max(tl[0], max(tl[1], tl[2]));
+        
+        //Valores por defecto, todos a 1.0. Luego se modifican si es necesario
+        gl_TessLevelInner[0] = 1.0;
+        gl_TessLevelOuter[0] = 1.0;
+        gl_TessLevelOuter[1] = 1.0;
+        gl_TessLevelOuter[2] = 1.0;
+        
+        //Cambiado de nomenclatura para ahorrar
+        vec3 p[6];
+        for (int i = 0; i < 6; i++) {
+            p[i] = VPosition[i];
+        }
+        //calculo de normales del elemento central y elementos vecinos
+        vec3 nec = normalize(VNormal[0] + VNormal[1] + VNormal[2]);
+        vec3 nv[3];
+        for (int i = 0; i < 3; i++) {
+            nv[i] = normalize(VNormal[i] + VNormal[(i+1)%3] + VNormal[(i+3)]);
+        }
+
+        //Calculo de puntos medios de aristas
+        vec3 p_mid[3];
+        for (int i = 0; i < 3; i++) {
+            p_mid[i] = (p[i] + p[(i+1)%3])*0.5;
+        }
+
+        //Calculo de ui
+        bool ui[3];
+        ui[0] = calcUi(p_mid[0], CamPos, nec, nv[0]);
+        ui[1] = calcUi(p_mid[1], CamPos, nec, nv[1]);
+        ui[2] = calcUi(p_mid[2], CamPos, nec, nv[2]);
+        bool sil = false;
+        if (ui[0] || ui[1] || ui[2]) sil = true; //hay al menos uno silueta
+        if (sil) { //si hay alguno silueta, seteo maxtess si era silueta, o una funcion lineal si no
+            float inner_val = 1.0;
+            for (int i = 0; i < 3; i++) {
+                if (ui[i]) 
+                    gl_TessLevelOuter[i] = MaxTess; //es silueta, tessmax
+                else { //no es silueta, pero hay otro que si, calculo un nivel lineal
+                    float uhat = abs(calcUiHat(p_mid[i], CamPos, nec, nv[i]));
+                    if (uhat <= Beta) {
+                        inner_val = max(inner_val, -(MaxTess-1)/Beta * uhat + MaxTess);
+                        //gl_TessLevelOuter[i] = -(MaxTess-1)/Beta * uhat + MaxTess;
+                    } //si no, queda con 1
+                }
+            }
+            //gl_TessLevelInner[0] = max(gl_TessLevelOuter[0], max(gl_TessLevelOuter[1], gl_TessLevelOuter[2]));
+            gl_TessLevelInner[0] = inner_val;
+        } //si no hay ninguno silueta, no hacer nada (quedan todos con 1)
+    } else {
+        gl_TessLevelInner[0] = 1.0; //TessDefault;
+        gl_TessLevelOuter[0] = 1.0; //TessDefault; 
+        gl_TessLevelOuter[1] = 1.0; //TessDefault;
+        gl_TessLevelOuter[2] = 1.0; //TessDefault;
+    }
+}

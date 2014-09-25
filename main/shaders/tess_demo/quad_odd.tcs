@@ -1,0 +1,30 @@
+#version 400
+layout (vertices = 4) out;
+
+in vec3 VPosition[];
+out vec3 TCPosition[];
+uniform vec2 TessLevelsInner;
+uniform vec4 TessLevelsOuter;
+uniform float TessDefault;
+uniform bool Tessellate;
+
+void main() {
+    //Pasa la posicion sin modificar
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+    TCPosition[gl_InvocationID] = VPosition[gl_InvocationID];
+    if (Tessellate) {
+        gl_TessLevelOuter[0] = TessLevelsOuter[0];
+        gl_TessLevelOuter[1] = TessLevelsOuter[1];
+        gl_TessLevelOuter[2] = TessLevelsOuter[2];
+        gl_TessLevelOuter[3] = TessLevelsOuter[3];
+        gl_TessLevelInner[0] = TessLevelsInner[0];
+        gl_TessLevelInner[1] = TessLevelsInner[1];
+    } else { 
+        gl_TessLevelOuter[0] = TessDefault;
+        gl_TessLevelOuter[1] = TessDefault;
+        gl_TessLevelOuter[2] = TessDefault;
+        gl_TessLevelOuter[3] = TessDefault;
+        gl_TessLevelInner[0] = TessDefault;
+        gl_TessLevelInner[1] = TessDefault;
+    }
+}

@@ -1,0 +1,122 @@
+#version 400
+//Cantidad de vertices del patch de salida
+layout (vertices = 16) out;
+
+in vec3 VPosition[];
+out vec3 TCPosition[];
+
+uniform vec3 CamPos;
+uniform float MaxDist;
+uniform float MinDist;
+uniform float MaxTess;
+uniform bool UseTessLinear;
+uniform vec3 delta;
+uniform bool Tessellate;
+float calcTessLevelLinear(float d, float dmin, float dmax, float tessmax) {
+    if (d > dmax) return 1.0;
+    else 
+        return 1.0+(tessmax-1.0)*(dmax-d)/(dmax-dmin);
+}
+
+float calcTessLevelLinearInverse(float d, float dmin, float dmax, float tessmax) {
+    if (d > dmax) return 1.0;
+    else 
+        return -(((tessmax-1.0)*dmax-d*tessmax)*dmin + d*dmax)/(d*(dmin-dmax));
+}
+  
+float calcTessLevel(float d) {
+    if (UseTessLinear) {
+        return calcTessLevelLinear(d, MinDist, MaxDist, MaxTess);
+    } else {
+        return calcTessLevelLinearInverse(d, MinDist, MaxDist, MaxTess);
+    }
+}
+
+void main() {
+    //Pasa la posicion sin modificar
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+    TCPosition[gl_InvocationID] = VPosition[gl_InvocationID];
+    if (Tessellate) {
+        //Este metodo calcula los niveles por arista segun el punto mas cercano
+        //Se calcula el centroide como el promedio de todos los puntos del patch
+        vec3 centroide = vec3(0.0);
+        for (int i = 0; i < 16; i++) {
+            centroide = centroide + VPosition[i].xyz;
+        }
+        centroide = centroide/16.0;
+        //Distancia al centroide
+        float dc = distance(centroide+delta, CamPos);
+
+        //Se calculan las distancias de todos los puntos a la camara
+        float distances[16];
+        for (int i = 0; i < 16; i++) {
+            distances[i] = distance(VPosition[i]+delta, CamPos);
+        }
+
+        //Se elige la menor distancia de todas las calculadas en cada arista parametrica
+        float min_distances[4];
+        min_distances[0] = min(min(min(distances[3], distances[2]), distances[1]), distances[0]);
+        min_distances[1] = min(min(min(distances[0], distances[4]), distances[8]), distances[12]);
+        min_distances[2] = min(min(min(distances[12], distances[13]), distances[14]), distances[15]);
+        min_distances[3] = min(min(min(distances[15], distances[11]), distances[7]), distances[3]);
+        //Se calcula el nivel de teselacion con las minimas y se asigna
+        for (int i = 0; i < 4; i++) {
+            gl_TessLevelOuter[i] = calcTessLevel(min_distances[i]);
+        }
+        //Se calcula el nivel de teselacion para con respecto al centroide y se asigna
+        float tc = calcTessLevel(dc);
+        gl_TessLevelInner[0] = tc;
+        gl_TessLevelInner[1] = tc;
+    } else {
+        gl_TessLevelInner[0] = 1.0;
+        gl_TessLevelInner[1] = 1.0;
+        gl_TessLevelOuter[0] = 1.0;
+        gl_TessLevelOuter[1] = 1.0;
+        gl_TessLevelOuter[2] = 1.0;
+        gl_TessLevelOuter[3] = 1.0;
+    }
+
+    //Este metodo calcula los niveles segun los segmentos extremos
+    //Se capturan los vertices de las esquinas del patch
+  //vec3 p0 = VPosition[0].xyz;
+  //vec3 p1 = VPosition[3].xyz;
+  //vec3 p2 = VPosition[12].xyz;
+  //vec3 p3 = VPosition[15].xyz;
+    //Este es el orden del patch
+    //3 7 11 15
+    //2 6 10 14
+    //1 5 9  13
+    //0 4 8  12
+    //y gl_TessLevelOuter[0] corresponde al segmento 03, el segundo al 0-12, el tercero a 12-15 y el 4to a 3-15
+  //vec3 p0 = VPosition[3].xyz;
+  //vec3 p1 = VPosition[0].xyz;
+  //vec3 p2 = VPosition[12].xyz;
+  //vec3 p3 = VPosition[15].xyz;
+  //
+  //vec3 centroide = vec3(0.0);
+  //for (int i = 0; i < 16; i++) {
+  //    centroide = centroide + VPosition[i].xyz;
+  //}
+  //centroide = centroide/16.0;
+ 
+  ////Se calculan los puntos medios de las aristas
+  //vec3 p01 = 0.5*(p0+p1);
+  //vec3 p12 = 0.5*(p1+p2);
+  //vec3 p23 = 0.5*(p2+p3);
+  //vec3 p30 = 0.5*(p3+p0);
+  ////Se calculan todas las distancias
+  //float d01[3];  d01[0] = distance(p0, CamPos); d01[1] = distance(p1, CamPos); d01[2] = distance(p01, CamPos);
+  //float d12[3];  d12[0] = d01[1];               d12[1] = distance(p2, CamPos); d12[2] = distance(p12, CamPos);
+  //float d23[3];  d23[0] = d12[1];               d23[1] = distance(p3, CamPos); d23[2] = distance(p23, CamPos);
+  //float d30[3];  d30[0] = d23[1];               d30[1] = d01[0];               d30[2] = distance(p30, CamPos);
+  //float dc = distance(centroide, CamPos);
+
+  ////Define los niveles de teselacion
+  //gl_TessLevelOuter[0] = max(max(calcTessLevel(d01[0]), calcTessLevel(d01[1])), calcTessLevel(d01[2]));
+  //gl_TessLevelOuter[1] = max(max(calcTessLevel(d12[0]), calcTessLevel(d12[1])), calcTessLevel(d12[2]));
+  //gl_TessLevelOuter[2] = max(max(calcTessLevel(d23[0]), calcTessLevel(d23[1])), calcTessLevel(d23[2]));
+  //gl_TessLevelOuter[3] = max(max(calcTessLevel(d30[0]), calcTessLevel(d30[1])), calcTessLevel(d30[2]));
+  //float tc = calcTessLevel(dc);
+  //gl_TessLevelInner[0] = tc;
+  //gl_TessLevelInner[1] = tc;
+}

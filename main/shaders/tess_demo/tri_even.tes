@@ -1,0 +1,18 @@
+#version 400
+
+layout(triangles, fractional_even_spacing, ccw) in;
+
+in vec3 TCPosition[];
+
+uniform mat4 MVPMatrix;
+
+void main() {
+    //Coordenadas baricentricas
+    float u = gl_TessCoord.x;
+    float v = gl_TessCoord.y;
+    float w = gl_TessCoord.z;
+
+    vec4 position = vec4(u*TCPosition[0] + v*TCPosition[1] + w*TCPosition[2], 1.0);
+
+    gl_Position = MVPMatrix * position;
+}

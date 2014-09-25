@@ -1,0 +1,144 @@
+#version 400
+layout (vertices = 4) out;
+
+in vec2 VPosition[];
+out vec2 TCPosition[];
+out vec3 TCWorldPos[];
+uniform float MaxTess;
+uniform bool Tessellate;
+uniform float TessDefault;
+//uniform mat4 MVPMatrix;
+uniform float VertScale;
+uniform float HorizScale;
+//uniform vec2 ViewPortSize;
+uniform float MaxDist;
+uniform float MinDist;
+uniform vec3 CamPos;
+uniform bool UseTessLinear;
+
+uniform sampler2D HeightMap;
+
+//Dado un valor y un limite, devuelve la potencia de dos mas cercana (buscando para arriba hasta max_exponent)
+//Si el valor supera 2^max_exponent, retorna 2^max_exponent
+float convertToExp2(float val, int max_exponent) {
+    for (int exponent = 0; exponent <= max_exponent; exponent++) {
+        float v = pow(2, exponent);
+        if (val < v) return v;
+    }
+    return pow(2, max_exponent);
+}
+float calcTessLevelLinear(float d, float dmin, float dmax, float tessmax) {
+    if (d > dmax) return 1.0;
+    else 
+        return 1.0+(tessmax-1.0)*(dmax-d)/(dmax-dmin);
+}
+
+float calcTessLevelLinearInverse(float d, float dmin, float dmax, float tessmax) {
+    if (d > dmax) return 1.0;
+    else 
+        return -(((tessmax-1.0)*dmax-d*tessmax)*dmin + d*dmax)/(d*(dmin-dmax));
+}
+  
+float calcTessLevel(float d) {
+    if (UseTessLinear) {
+        return calcTessLevelLinear(d, MinDist, MaxDist, MaxTess);
+    } else {
+        return calcTessLevelLinearInverse(d, MinDist, MaxDist, MaxTess);
+    }
+}
+
+void main() {
+    //gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position; 
+    TCPosition[gl_InvocationID] = VPosition[gl_InvocationID];
+    if (Tessellate) {
+        vec3 pos_world[4];
+        for (int i = 0; i < 4; i++) {
+            vec2 texcoord = VPosition[i].xy;
+            float height = texture(HeightMap, texcoord).r;
+            pos_world[i] = vec3(VPosition[i].x*HorizScale, height*VertScale, VPosition[i].y*HorizScale);
+            //TCWorldPos[i] = pos_world[i]; //salida para el TES
+        }
+        TCWorldPos[gl_InvocationID] = pos_world[gl_InvocationID]; //salida para el TES
+
+        vec3 p0 = pos_world[0];
+        vec3 p1 = pos_world[1];
+        vec3 p2 = pos_world[2];
+        vec3 p3 = pos_world[3];
+        //Se calcula el centroide como el promedio de estos
+        vec3 centroide = (p0 + p1 + p2 + p3)/4.0;
+        //Se calculan los puntos medios de las aristas
+        vec3 p01 = 0.5*(p0+p1);
+        vec3 p12 = 0.5*(p1+p2);
+        vec3 p23 = 0.5*(p2+p3);
+        vec3 p30 = 0.5*(p3+p0);
+        //Se calculan todas las distancias
+        float d01[3];  d01[0] = distance(p0, CamPos); d01[1] = distance(p1, CamPos); d01[2] = distance(p01, CamPos);
+        float d12[3];  d12[0] = distance(p1, CamPos); d12[1] = distance(p2, CamPos); d12[2] = distance(p12, CamPos);
+        float d23[3];  d23[0] = distance(p2, CamPos); d23[1] = distance(p3, CamPos); d23[2] = distance(p23, CamPos);
+        float d30[3];  d30[0] = distance(p3, CamPos); d30[1] = distance(p0, CamPos); d30[2] = distance(p30, CamPos);
+        float dc = distance(centroide, CamPos);
+
+        //Define los niveles de teselacion
+        int exponent = int(ceil(log2(MaxTess)));
+        gl_TessLevelOuter[1] = convertToExp2(max(max(calcTessLevel(d01[0]), calcTessLevel(d01[1])), calcTessLevel(d01[2])), exponent);
+        gl_TessLevelOuter[3] = convertToExp2(max(max(calcTessLevel(d12[0]), calcTessLevel(d12[1])), calcTessLevel(d12[2])), exponent);
+        gl_TessLevelOuter[2] = convertToExp2(max(max(calcTessLevel(d23[0]), calcTessLevel(d23[1])), calcTessLevel(d23[2])), exponent);
+        gl_TessLevelOuter[0] = convertToExp2(max(max(calcTessLevel(d30[0]), calcTessLevel(d30[1])), calcTessLevel(d30[2])), exponent);
+        float tc = convertToExp2(calcTessLevel(dc), exponent);
+        gl_TessLevelInner[0] = max(max(max(max(tc, gl_TessLevelOuter[0]), gl_TessLevelOuter[1]), gl_TessLevelOuter[2]), gl_TessLevelOuter[3]);
+        gl_TessLevelInner[1] = max(max(max(max(tc, gl_TessLevelOuter[0]), gl_TessLevelOuter[1]), gl_TessLevelOuter[2]), gl_TessLevelOuter[3]);
+      //gl_TessLevelInner[0] = tc;
+      //gl_TessLevelInner[1] = tc;
+
+//      vec3 midpoints[4];
+//      for (int i = 0; i < 4; i++) { //calculo de los puntos medios de las aristas
+//          midpoints[i] = (pos_world[i]+pos_world[(i+1)%4])/2.0; 
+//      }
+//      vec3 centroide = vec3(0.0);
+//      for (int i = 0; i < 4; i++) centroide = centroide + pos_world[i];
+//      centroide /= 4.0;
+//      //Distancia del centroide a la camara
+//      float dist = distance(centroide, CamPos);
+
+///     for (int i = 0; i < 4; i++) 
+///         //dist = min(dist, distance(pos_world[i], CamPos)); //distancia a puntos
+///         dist = min(dist, distance(midpoints[i], CamPos)); //distancia a puntos medios de aristas
+///     float tess_level;
+///     //Calculo del nivel de teselacion lineal
+///     if (dist > MaxDist)
+///         tess_level = 1.0;
+///     else 
+///         tess_level = -((MaxTess - 1.0)/MaxDist)*dist + MaxTess;
+
+//      //Calculo de los niveles de teselacion por arista
+//      float mm = -((MaxTess - 1.0)/MaxDist);
+//      float tess_level_outer[4];
+//      int exponent = int(ceil(log2(MaxTess)));
+//      for (int i = 0; i < 4; i++) { 
+//          float disti = distance(midpoints[i], CamPos); //distancia a puntos medios de aristas
+//          //Calculo del nivel de teselacion lineal
+//          if (disti > MaxDist) tess_level_outer[i] = 1.0;
+//          else tess_level_outer[i] = mm*disti + MaxTess;
+//          
+//          //tess_level_outer[i] = calcTessLevel(MaxDist*2, 0.1, 64.0, disti);
+//          gl_TessLevelOuter[i] = convertToExp2(tess_level_outer[i], exponent);
+//      }
+
+//    //float tess_level_inner;
+//    //if (dist > MaxDist)
+//    //    tess_level_inner = 1.0;
+//    //else 
+//    //    tess_level_inner = mm*dist + MaxTess;
+//    //gl_TessLevelInner[0] = tess_level_inner;
+//    //gl_TessLevelInner[1] = tess_level_inner;
+//      gl_TessLevelInner[0] = max(gl_TessLevelOuter[0], gl_TessLevelOuter[2]);
+//      gl_TessLevelInner[1] = max(gl_TessLevelOuter[1], gl_TessLevelOuter[3]);
+    } else {
+        gl_TessLevelOuter[0] = TessDefault;
+        gl_TessLevelOuter[1] = TessDefault;
+        gl_TessLevelOuter[2] = TessDefault;
+        gl_TessLevelOuter[3] = TessDefault;
+        gl_TessLevelInner[0] = TessDefault;
+        gl_TessLevelInner[1] = TessDefault;
+    }
+}

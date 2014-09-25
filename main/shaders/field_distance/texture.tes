@@ -1,0 +1,65 @@
+#version 420
+
+//Aca se pone point_mode ADEMAS de poner quads
+layout(quads, point_mode, equal_spacing, cw) in;
+in vec2 TCPosition[];
+in vec2 TCField[];
+in vec2 TCFieldR[];
+in vec2 TCFieldRB[];
+in vec2 TCFieldB[];
+in vec2 TCPositionOriginal[];
+out vec2 TETexCoord;
+
+uniform float StepH;
+uniform float dx;
+uniform float dy;
+uniform mat4 MVPMatrix;
+
+void main() {
+    //Cordenadas internas a este quad
+    float u = gl_TessCoord.x;
+    float v = gl_TessCoord.y;
+    
+    //Interpolacion bilineal de las posiciones
+    vec2 positions[4];
+    positions[0] = TCPosition[0] + StepH*TCField[0];
+    positions[1] = TCPosition[0] + vec2(dx, 0.0) + StepH*TCFieldR[0];
+    positions[2] = TCPosition[0] + vec2(dx, dy)  + StepH*TCFieldRB[0];
+    positions[3] = TCPosition[0] + vec2(0.0, dy) + StepH*TCFieldB[0];
+    vec2 a = mix(positions[0], positions[1], u);
+    vec2 b = mix(positions[3], positions[2], u);
+    vec2 pos = mix(a, b, v);
+
+    vec2 fields[4];
+    fields[0] = TCField[0];
+    fields[1] = TCFieldR[0];
+    fields[2] = TCFieldRB[0];
+    fields[3] = TCFieldB[0];
+
+    //Interpolacion bilineal del campo vectorial en este elemento
+    vec2 aa = mix(fields[0], fields[1], u);
+    vec2 bb = mix(fields[3], fields[2], u);
+    vec2 field = mix(aa, bb, v);
+
+    vec2 position;
+    //position = pos + StepH*field;
+    if ((u == 0.0 && v == 0.0) || 
+       (u == 0.0 && v == 1.0) || 
+       //(u == 1.0 && v == 0.0) || 
+       (u == 1.0 && v == 1.0)) { 
+        position = vec2(0.0);
+    } else {
+        position = pos + StepH*field;
+    }
+    //vec2 position = TCPosition[0];
+    //TETexCoord = TCPosition[0]+vec2(u*2.0/dx, v*2.0/dy);
+    //TETexCoord = TCPositionOriginal[0]+vec2(u*2.0/dx, v*2.0/dy); //se utiliza la posicion original porque la actual va a dar como resultado otro color
+
+    TETexCoord = TCPositionOriginal[0]+vec2(u*dx, v*dy); //se utiliza la posicion original porque la actual va a dar como resultado otro color
+  //if (u == 1.0 && v == 1.0) {
+  //    position = TCPosition[0] + vec2(dx, dy);
+  //    gl_Position = MVPMatrix*vec4(position, 0.0, 1.0);
+  //    return;
+  //}
+    gl_Position = MVPMatrix*vec4(position, 0.0, 1.0);
+}

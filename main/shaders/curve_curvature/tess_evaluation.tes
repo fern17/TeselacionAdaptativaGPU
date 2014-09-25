@@ -1,0 +1,31 @@
+#version 400
+//tipo de division a efectuar
+layout (isolines) in;
+in vec3 TCPosition[];
+uniform mat4 MVPMatrix;
+
+void main() {
+    //Coordenada u de teselacion
+    float u = gl_TessCoord.x;
+    float v = gl_TessCoord.y;
+
+    //Los vertices del patch (puntos de control)
+    vec3 p0 = TCPosition[0]+vec3(-0.2*v,0.2*v,0);
+    vec3 p1 = TCPosition[1]+vec3(-0.2*v,0.2*v,0);
+    vec3 p2 = TCPosition[2]+vec3(-0.2*v,0.2*v,0);
+    vec3 p3 = TCPosition[3]+vec3(-0.2*v,0.2*v,0);
+                                          
+    float u1 = (1.0 - u);
+    float u2 = u*u;
+
+    //Polinomios de Bernstein evaluados en u
+    float b3 = u2 * u;
+    float b2 = 3.0 * u2 * u1;
+    float b1 = 3.0 * u * u1 * u1;
+    float b0 = u1 * u1 * u1;
+
+    //Interpolacion cubica de Bezier
+    vec3 p = p0*b0 + p1*b1 + p2*b2 + p3*b3;
+
+    gl_Position = MVPMatrix * vec4(p, 1.0);
+}

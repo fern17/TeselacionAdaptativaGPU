@@ -1,0 +1,52 @@
+#version 400
+layout (vertices = 4) out;
+
+in vec3 VPosition[];
+out vec3 TCPosition[];
+uniform float MaxTess;
+uniform float TessDefault;
+uniform bool Tessellate;
+uniform int NumLines;
+uniform float CurvFactor;
+
+int CurveNumVertices = 4; //cantidad de vertices que definen la curva. grado+1
+#define P0 VPosition[0]
+#define P1 VPosition[1]
+#define P2 VPosition[2]
+#define P3 VPosition[3]
+
+//Calcula el factor de teselacion para el vecindario alrededor de p1
+//p_{i-1} = p0.
+//p_i = p1;
+//p_{i+1} = p2
+float calcFactor(vec3 p0, vec3 p1, vec3 p2) {
+    vec3 midpoint = 0.5*(p0+p2);
+    float num = distance(p1, midpoint); //distancia entre el punto i y el punto medio
+    float den = distance(p0, p2); //distancia anterior posterior
+    return num/den;
+}
+
+//Calcula el nivel de teselacion para una curva de 4 puntos
+float calcTessCurve(vec3 p0, vec3 p1, vec3 p2, vec3 p3, int numvertices) {
+    float c1 = calcFactor(p0, p1, p2);
+    float c2 = calcFactor(p1, p2, p3);
+    float maxi = max(c1, c2);
+    return max(2*(numvertices-1), min(MaxTess, CurvFactor*maxi));
+}
+
+void main() {
+    //Pasa la posicion sin modificar
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+    TCPosition[gl_InvocationID] = VPosition[gl_InvocationID];
+  
+    float NumSegments = TessDefault;
+    float NumStrips = NumLines;
+    if (Tessellate) {
+        NumSegments = calcTessCurve(VPosition[0], VPosition[1], VPosition[2], VPosition[3], CurveNumVertices);
+    } else {
+        NumStrips = 1;
+        NumSegments = TessDefault;
+    }
+    gl_TessLevelOuter[0] = NumStrips;
+    gl_TessLevelOuter[1] = NumSegments;
+}

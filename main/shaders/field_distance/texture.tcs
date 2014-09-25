@@ -1,0 +1,81 @@
+#version 420
+layout (vertices = 1) out;
+
+in vec2 VPosition[];
+in vec2 VField[];
+in vec2 VFieldR[];
+in vec2 VFieldRB[];
+in vec2 VFieldB[];
+in vec2 VPositionOriginal[];
+out vec2 TCPosition[];
+out vec2 TCField[];
+out vec2 TCFieldR[];
+out vec2 TCFieldRB[];
+out vec2 TCFieldB[];
+out vec2 TCPositionOriginal[];
+
+uniform float MaxTess;
+uniform float ScaleX;
+uniform float ScaleY;
+uniform bool Tessellate;
+uniform float TessDefault;
+uniform int CurrentField;
+uniform vec3 CamPos;
+
+#define ID gl_InvocationID
+
+//div F(x,y,z) = \nabla * F(x,y) = \partial F_i/\partial F_i
+
+float divergence() {
+    float val1 = 0.0, val2 = 0.0;
+    if (CurrentField == 0) {
+        val1 = -sin(float(VPosition[ID]))*ScaleX;
+        val2 = ScaleY;
+    }
+    if (CurrentField == 1) {
+        val1 = ScaleX;
+        val2 = ScaleY;
+    }
+    if (CurrentField == 2) {
+        val1 = cos( float(VPosition[ID]))*ScaleX;
+        val2 = -sin(float(VPosition[ID]))*ScaleY;
+    }
+
+    return val1 + val2;
+}
+
+float calcTessLevel() {
+    float dist = distance(vec3(VPosition[ID],0.0), CamPos);
+    float tess_level = -((MaxTess - 1.0)/2)*dist + MaxTess;
+    return clamp(tess_level, 1.0, MaxTess);
+}
+
+void main() {
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position; 
+    TCPosition[gl_InvocationID] = VPosition[gl_InvocationID];
+    TCField[gl_InvocationID]   = VField  [gl_InvocationID];
+    TCFieldR[gl_InvocationID]  = VFieldB [gl_InvocationID];
+    TCFieldRB[gl_InvocationID] = VFieldRB[gl_InvocationID];
+    TCFieldB[gl_InvocationID]  = VFieldB [gl_InvocationID];
+    TCPositionOriginal[gl_InvocationID] = VPositionOriginal[gl_InvocationID];
+    if (Tessellate) {
+        //float div = divergence();
+        float tess_level = calcTessLevel();
+        
+        tess_level = min(tess_level, MaxTess);
+        
+        gl_TessLevelOuter[0] = tess_level; 
+        gl_TessLevelOuter[1] = tess_level; 
+        gl_TessLevelOuter[2] = tess_level; 
+        gl_TessLevelOuter[3] = tess_level; 
+        gl_TessLevelInner[0] = tess_level; 
+        gl_TessLevelInner[1] = tess_level; 
+    } else {
+        gl_TessLevelOuter[0] = TessDefault;
+        gl_TessLevelOuter[1] = TessDefault;
+        gl_TessLevelOuter[2] = TessDefault;
+        gl_TessLevelOuter[3] = TessDefault;
+        gl_TessLevelInner[0] = TessDefault;
+        gl_TessLevelInner[1] = TessDefault;
+    }
+}

@@ -1,0 +1,116 @@
+#version 400
+layout (vertices = 6) out;
+
+in vec3 VPosition[];
+in vec3 VNormal[];
+out vec3 TCPosition[];
+out vec3 TCNormal[];
+
+uniform float MaxTess;
+uniform bool Tessellate;
+uniform float TessDefault;
+uniform vec3 CamPos;
+uniform vec3 CamCenter;
+uniform float Beta;
+#define ID gl_InvocationID
+
+//Version vieja
+//El nivel de silueta de una arista de un triangulo se calcula como el producto entre dos terminos
+//El primero es el producto punto entre el vector que va desde la camara al punto medio de la arista y la normal
+//Y el segundo es el mismo producto pero con la normal del triangulo vecino 
+float calcSilhouetteness(int edge, vec3 normS, vec3 normT, float beta) {
+    vec3 edgeMidPoint = (VPosition[(edge+1)%3] + VPosition[edge])/2.0;
+    //vec3 midPointToCamVector = normalize(CamPos - edgeMidPoint);
+    vec3 midPointToCamVector = normalize(CamPos - CamCenter);
+    if (length(normS) < 0.001) return 1.0; //revisar 
+    float firstTerm = dot(midPointToCamVector, normS);
+    float secondTerm = dot(midPointToCamVector, normT);
+    
+    if (firstTerm < 0.0 && secondTerm < 0.0) return 0.0; //evitar teselar las aristas cuyos ambos triangulos miran para otro lado
+
+    float prod = firstTerm*secondTerm;
+    //float prod = min(firstTerm,secondTerm);
+
+    if (prod <= 0.0) return 1.0;
+    if (prod > beta) return 0.0;
+    return 1.0-prod/beta;
+    //return 1.0-prod; //alternativa que hace niveles de teselacion mas uniformes
+}
+
+
+bool calcUi(vec3 ei, vec3 c, vec3 nec, vec3 nvi) {
+    vec3 v = c - ei;
+    float t1 = dot(v, nec);
+    //La siguiente linea genera union en T, pero supongo que no se va a ver porque la "panza" de los vertices desplazados la va a ocultar
+    if (t1 < 0) return false; //si el elemento que estoy probando no esta frente a la camara
+    float t2 = dot(v, nvi);
+    return (t1*t2 <= 0);
+}
+
+float calcUiHat(vec3 ei, vec3 c, vec3 nec, vec3 nvi) {
+    vec3 v = normalize(c-ei);
+    float t1 = dot(v, nec);
+    float t2 = dot(v, nvi);
+    return t1*t2;
+}
+void main() {
+    gl_out[ID].gl_Position = gl_in[ID].gl_Position; 
+    TCPosition[ID] = VPosition[ID];
+    TCNormal[ID] = VNormal[ID];
+    if (Tessellate) {
+        //Valores por defecto, todos a 1.0. Luego se modifican si es necesario
+        gl_TessLevelInner[0] = 1.0;
+        gl_TessLevelOuter[0] = 1.0;
+        gl_TessLevelOuter[1] = 1.0;
+        gl_TessLevelOuter[2] = 1.0;
+        
+        //Cambiado de nomenclatura para ahorrar
+        vec3 p[6];
+        for (int i = 0; i < 6; i++) {
+            p[i] = VPosition[i];
+        }
+        //calculo de normales del elemento central y elementos vecinos
+        vec3 nec = normalize(VNormal[0] + VNormal[1] + VNormal[2]);
+        vec3 nv[3];
+        for (int i = 0; i < 3; i++) {
+            nv[i] = normalize(VNormal[i] + VNormal[(i+1)%3] + VNormal[(i+3)]);
+        }
+
+        //Calculo de puntos medios de aristas
+        vec3 p_mid[3];
+        for (int i = 0; i < 3; i++) {
+            p_mid[i] = (p[i] + p[(i+1)%3])*0.5;
+        }
+
+        //Calculo de ui
+        bool ui[3];
+        ui[0] = calcUi(p_mid[0], CamPos, nec, nv[0]);
+        ui[1] = calcUi(p_mid[1], CamPos, nec, nv[1]);
+        ui[2] = calcUi(p_mid[2], CamPos, nec, nv[2]);
+        bool sil = false;
+        if (ui[0] || ui[1] || ui[2]) sil = true; //hay al menos uno silueta
+        
+        if (sil) { //si hay alguno silueta, seteo maxtess si era silueta, o una funcion lineal si no
+            float inner_val = 1.0;
+            for (int i = 0; i < 3; i++) {
+                if (ui[i]) 
+                    gl_TessLevelOuter[(i+2)%3] = MaxTess; //es silueta, tessmax (cruzados)
+                else { //no es silueta, pero hay otro que si, calculo un nivel lineal
+                    float uhat = abs(calcUiHat(p_mid[i], CamPos, nec, nv[i]));
+                    if (uhat <= Beta) {
+                        inner_val = max(inner_val, -(MaxTess-1)/Beta * uhat + MaxTess);
+                        //gl_TessLevelOuter[(i+2)%3] = -(MaxTess-1)/Beta * uhat + MaxTess;
+                    } //si no, queda con 1
+                }
+            }
+            gl_TessLevelInner[0] = inner_val;
+        } //si no hay ninguno silueta, no hacer nada (quedan todos con 1)
+
+
+    } else {
+        gl_TessLevelInner[0] = TessDefault;
+        gl_TessLevelOuter[0] = TessDefault; 
+        gl_TessLevelOuter[1] = TessDefault;
+        gl_TessLevelOuter[2] = TessDefault;
+    }
+}

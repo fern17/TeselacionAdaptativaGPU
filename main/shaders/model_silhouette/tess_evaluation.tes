@@ -1,0 +1,33 @@
+#version 400
+
+layout(triangles, equal_spacing, cw) in;
+in vec3 TCPosition[];
+in vec3 TCNormal[];
+out vec3 TENormal;
+out vec4 TEPosition;
+out vec3 TEWorldPosition;
+out float TETessLevel;
+
+uniform mat4 ModelViewMatrix;
+uniform mat4 MVPMatrix;
+uniform float MaxTess;
+uniform vec3 CamPos;
+
+
+void main() {
+    //Coordenadas baricentricas
+    float u = gl_TessCoord.x;
+    float v = gl_TessCoord.y;
+    float w = gl_TessCoord.z;
+
+    vec4 position = vec4(u*TCPosition[0] + v*TCPosition[1] + w*TCPosition[2], 1.0);
+    vec3 normal = normalize(u*TCNormal[0] + v*TCNormal[1] + w*TCNormal[2]);
+
+    //TEPosition = ModelViewMatrix * position;
+    TEPosition = MVPMatrix * position;
+    TEWorldPosition = position.xyz; 
+    TENormal = normal;
+    gl_Position = MVPMatrix * position;
+    TETessLevel = gl_TessLevelInner[0]; //siempre es el mayor
+    
+}

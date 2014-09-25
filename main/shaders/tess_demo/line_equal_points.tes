@@ -1,0 +1,26 @@
+#version 400
+
+layout(point_mode, isolines, equal_spacing, cw) in;
+
+in vec3 TCPosition[];
+
+uniform mat4 MVPMatrix;
+uniform bool LineSpiral;
+void main() {
+    //Coordenadas baricentricas
+    float u = gl_TessCoord.x;
+    float v = gl_TessCoord.y;
+
+    if (!LineSpiral) {
+        //Lineas paralelas
+        vec3 p1 = mix(TCPosition[0], TCPosition[3], u);
+        vec3 p2 = mix(TCPosition[1], TCPosition[2], u);
+        vec4 position = vec4(mix(p1, p2, v), 1.0);
+        gl_Position = MVPMatrix * position;
+    } else { 
+        //Espiral
+        float r = (gl_TessCoord.y + gl_TessCoord.x / gl_TessLevelOuter[0]);
+        float t = gl_TessCoord.x * 2.0 * 3.14159;
+        gl_Position = vec4(sin(t) * r, cos(t) * r, 0.5, 1.0);
+    }
+}

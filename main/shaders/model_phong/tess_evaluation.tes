@@ -1,0 +1,68 @@
+#version 400
+
+layout(triangles, equal_spacing, ccw) in;
+in vec3 TCPosition[];
+in vec3 TCNormal[];
+out vec3 TENormal;
+out vec4 TEPosition;
+out vec3 TEWorldPosition;
+out float TETessLevel;
+
+uniform mat4 ModelViewMatrix;
+uniform mat4 MVPMatrix;
+uniform float MaxTess;
+uniform float Alpha;
+
+vec3 project(vec3 q, vec3 p, vec3 n) {
+    return q - (dot(q-p, n)*n);
+}
+
+#define Pi TCPosition[0]
+#define Pj TCPosition[1]
+#define Pk TCPosition[2]
+void main() {
+    //Coordenadas baricentricas
+    float u = gl_TessCoord.x;
+    float v = gl_TessCoord.y;
+    float w = gl_TessCoord.z;
+    
+    //Peso de cada punto
+    vec3 p0 = u * TCPosition[0];
+    vec3 p1 = v * TCPosition[1];
+    vec3 p2 = w * TCPosition[2];
+    //Punto interpolado en el plano del triangulo
+    vec4 pos_flat = vec4((p0 + p1 + p2), 1.0);
+   
+    //Interpolacion de la normal
+    vec3 n0 = (u * TCNormal[0]);
+    vec3 n1 = (v * TCNormal[1]);
+    vec3 n2 = (w * TCNormal[2]);
+    vec3 normal = normalize(n0+n1+n2);
+
+    //Normales originales del triangulo
+    vec3 nn0 = (TCNormal[0]);
+    vec3 nn1 = (TCNormal[1]);
+    vec3 nn2 = (TCNormal[2]);
+    
+    vec3 posi = pos_flat.xyz;
+    //Proyecciones en los 3 planos
+    vec3 proy0 = project(posi, TCPosition[0], nn0);
+    vec3 proy1 = project(posi, TCPosition[1], nn1);
+    vec3 proy2 = project(posi, TCPosition[2], nn2);
+    //Interpolacion de las proyecciones
+    vec3 proy_inter = (u*proy0 + v*proy1 + w*proy2);
+    //vec3 proy_inter = u*u*Pi + v*v*Pj + w*w*Pk + u*v*(project(Pj, Pi, nn0)+project(Pi, Pj, nn1)) + 
+    //    v*w*(project(Pk, Pj, nn1)+project(Pj, Pk, nn2)) + w*u*(project(Pi, Pk, nn2) + project(Pk, Pi, nn0));
+
+//Resultado en 4d
+    vec4 pos_phong = vec4(proy_inter, 1.0);
+    //Interpolacion entre flat y phong
+    vec4 position = (1.0 - Alpha) * pos_flat + Alpha*pos_phong;
+    //vec4 position = pos_phong;
+    //TEPosition = ModelViewMatrix * position;
+    TEPosition = MVPMatrix * position;
+    TEWorldPosition = position.xyz; 
+    TENormal = normal;
+    TETessLevel = gl_TessLevelInner[0]; //siempre es el mayor
+    gl_Position = MVPMatrix * position;
+}
